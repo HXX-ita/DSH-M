@@ -1,0 +1,42 @@
+name: tests
+
+# 本插件采集的是 Windows 的计划任务和进程，所以 CI 必须在 Windows 上跑，
+# 否则那两类采集器的代码路径根本不会被覆盖到。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 语法自检
+        shell: pwsh
+        run: |
+          node --check index.js
+          node --check client.js
+          Get-ChildItem -Recurse -Filter *.mjs -Path lib, bin, test | ForEach-Object { node --check $_.FullName }
+
+      - name: YAML 解析器（自带用例 + 有 js-yaml 时做交叉验证）
+        run: node test/yaml.test.mjs
+
+      - name: 操作层（启停 / 删除 / 还原，全在临时沙箱里）
+        run: node test/actions.test.mjs
+
+      - name: 插件路由与安全守卫
+        run: node test/plugin.test.mjs
+
+      - name: 真实环境采集一次（冒烟）
+        run: node bin/dsh-m.mjs collect

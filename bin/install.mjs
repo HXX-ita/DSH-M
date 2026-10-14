@@ -87,7 +87,36 @@ console.log('   位置：' + destDir);
 console.log('   bundles：' + pkg.dsh.profile.bundles.join(' → '));
 console.log('   备份：' + backup);
 console.log('   关键文件齐全：' + (okFiles ? '是' : '否 ← 有问题！'));
+if (installed.version !== PKG.version) console.log('   ⚠️ 版本号对不上：' + installed.version);
+
+// ── 装完自检：把**装好的那一份**在沙箱里拉起来，确认路由真的注册得上 ──
+// 不做这一步的话，"装完发现少拷了文件"要等到重启应用才知道，代价太大。
+try {
+  const probeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-m-verify-'));
+  fs.mkdirSync(path.join(probeHome, 'skills', 'probe'), { recursive: true });
+  fs.writeFileSync(path.join(probeHome, 'skills', 'probe', 'SKILL.md'), '---\nname: probe\ndescription: 探针\n---\n', 'utf8');
+
+  const saved = process.env.DSH_HOME;
+  process.env.DSH_HOME = probeHome;
+  const mod = await import('file://' + path.join(destDir, 'index.js').replace(/\\/g, '/'));
+  const routes = [];
+  mod.apply({
+    logger: { info: () => {}, warn: () => {} },
+    inject: (deps, fn) => fn({ webServer: { register: ({ path: p }) => { routes.push(p); return () => {}; } } }),
+    effect: (fn) => fn(),
+  }, {});
+  process.env.DSH_HOME = saved;
+  fs.rmSync(probeHome, { recursive: true, force: true });
+
+  const okRoutes = routes.includes('/dsh-m/state') && routes.includes('/dsh-m/action');
+  console.log('   装完自检：' + (okRoutes ? '✅ 路由注册成功（' + routes.join('、') + '）' : '❌ 路由没注册上！'));
+  if (!okRoutes) { console.log('\n❌ 安装有问题，请把上面的输出发给我。'); process.exit(1); }
+} catch (e) {
+  console.log('   装完自检：❌ 加载失败 —— ' + String((e && e.message) || e));
+  console.log('\n❌ 安装有问题，请把上面的输出发给我。');
+  process.exit(1);
+}
+
 console.log('');
 console.log('⚠️  需要**重启 DSH** 才会加载（插件的服务端代码是启动时读的）。');
 console.log('    重启后右侧栏会出现「控制中心」标签。');
-if (installed.version !== PKG.version) console.log('   ⚠️ 版本号对不上：' + installed.version);
