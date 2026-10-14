@@ -1,5 +1,10 @@
 # 更新记录
 
+## v0.1.5
+
+- 给新增的两个技能（memory-library、plugin-trials）补中文说明词条。
+- 修复了一些错误。
+
 ## v0.1.4
 
 - 给新技能补上中文说明词条（`github-publish`、`search-first`），
