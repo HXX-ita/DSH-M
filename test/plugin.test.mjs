@@ -109,6 +109,17 @@ check('缺 action 参数返回 400', r6.code === 400);
 const raw = JSON.stringify(r1.body);
 check('接口输出里没有密钥痕迹', !/sk-[A-Za-z0-9_-]{16,}/.test(raw));
 
+// ── 客户端布局契约（真踩过：面板不滚，藏在下面的东西老板看不见）──
+//    官方 dsh-client-ui-sidebar-browser 的写法是
+//    .root{height:100%;min-height:0;flex-direction:column;flex:auto;display:flex}
+//    滚动区自己 overflow:auto。少任何一项，长内容就会被父容器裁掉。
+const clientSrc = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+check('根容器设了 height:100%', /height:\s*'100%'/.test(clientSrc));
+check('根容器设了 minHeight:0（flex 子项默认 min-height:auto，不加就撑破容器、滚动条不出现）', /minHeight:\s*0/.test(clientSrc));
+check('根容器是纵向 flex', /flexDirection:\s*'column'/.test(clientSrc));
+check('存在 overflowY:auto 的滚动区', /overflowY:\s*'auto'/.test(clientSrc));
+check('顶部固定区标了 flex:none', /flex:\s*'none'/.test(clientSrc));
+
 const bad = checks.filter((x) => !x).length;
 fs.rmSync(SANDBOX, { recursive: true, force: true });
 console.log(bad === 0 ? `\n🎉 全部通过（${checks.length} 项）：路由、安全、启停链路都对` : `\n有 ${bad} / ${checks.length} 项没通过`);

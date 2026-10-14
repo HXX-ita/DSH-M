@@ -4,6 +4,15 @@
  * 宿主以 window.__ModuleLoader__.load({ id, factory }) 加载本文件；
  * factory 内通过 inject 取得 ui 席位，注册一个右侧栏 Tab 及其面板。
  *
+ * ⚠️ 布局约定（踩过坑，照官方 dsh-client-ui-sidebar-browser 学来的）：
+ *   宿主把面板塞进一个 flex 容器里，**面板自己必须撑满并管理滚动**：
+ *     root     { height:100%; min-height:0; display:flex; flex-direction:column; flex:auto }
+ *     固定区   { flex:none }
+ *     滚动区   { flex:1 1 auto; min-height:0; overflow-y:auto }
+ *   最早我只写了个 `{ padding: '10px 12px' }`，没有高度也没有 overflow ——
+ *   结果内容一长就被父容器裁掉，**下面的东西根本滚不到**（老板实际反馈过）。
+ *   `min-height:0` 是关键：flex 子项默认 min-height:auto，不加就撑破容器、滚动条不出现。
+ *
  * 设计原则（对着老板的真实需求做的）：
  *   1. 每一项都有一句**中文说明**，看不懂技术名词也能判断要不要关
  *   2. 破坏性操作**先问一句**再执行，而且是红色按钮，不是蓝色
@@ -71,14 +80,29 @@ window.__ModuleLoader__.load({
     }
 
     function Dot(props) {
-      const color = props.on ? C.good : C.dim;
       return h('span', {
         style: {
-          display: 'inline-block', width: 7, height: 7, borderRadius: 4,
-          background: props.protected ? C.warn : color, marginRight: 6, flex: '0 0 auto',
+          display: 'inline-block', width: 7, height: 7, borderRadius: 4, flex: '0 0 auto',
+          background: props.protected ? C.warn : (props.on ? C.good : C.dim), marginRight: 6,
         },
       });
     }
+
+    // ── 布局：撑满 + 固定顶部 + 滚动列表 ──
+    const ROOT = {
+      height: '100%', minHeight: 0, flex: 'auto',
+      display: 'flex', flexDirection: 'column',
+      boxSizing: 'border-box', color: C.fg,
+    };
+    const TOP = {
+      flex: 'none', padding: '10px 12px 8px 12px',
+      borderBottom: '1px solid ' + C.line,
+    };
+    const SCROLL = {
+      flex: '1 1 auto', minHeight: 0,
+      overflowY: 'auto', overflowX: 'hidden',
+      padding: '10px 12px 28px 12px',   // 底部留白，最后一项不贴着边
+    };
 
     function Panel() {
       const [data, setData] = react.useState(null);
@@ -136,15 +160,11 @@ window.__ModuleLoader__.load({
       }
 
       function click(item, action) {
-        const spec = ACTIONS[action] || { zh: action, danger: false };
-        if (spec.danger) {
-          setConfirming({ item, action, spec });
-        } else {
-          doAction(item, action);
-        }
+        const spec = ACTIONS[action] || { zh: action, danger: false, hint: '' };
+        if (spec.danger) setConfirming({ item, action, spec });
+        else doAction(item, action);
       }
 
-      const box = { padding: '10px 12px' };
       const card = {
         background: C.bg, border: '1px solid ' + C.line, borderRadius: 8,
         padding: '8px 10px', marginBottom: 8,
@@ -156,8 +176,8 @@ window.__ModuleLoader__.load({
         color: on ? C.accent : C.dim, whiteSpace: 'nowrap',
       });
 
-      if (err && !data) return h('div', { style: { ...box, color: C.bad } }, '读取失败：' + err);
-      if (!data) return h('div', { style: { ...box, color: C.dim } }, '加载中…');
+      if (err && !data) return h('div', { style: { ...ROOT, padding: 12, color: C.bad } }, '读取失败：' + err);
+      if (!data) return h('div', { style: { ...ROOT, padding: 12, color: C.dim } }, '加载中…');
 
       const groups = data.groups || [];
       const items = (data.items && data.items[group]) || [];
@@ -167,123 +187,116 @@ window.__ModuleLoader__.load({
         if (!q) return true;
         return (it.title + ' ' + (it.zh || '') + ' ' + (it.original || '')).toLowerCase().includes(q);
       });
+      const curGroup = groups.find((x) => x.key === group);
 
-      return h('div', { style: box },
-        // ── 头部 ──
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-          h('span', { style: { color: C.accent } }, h(Icon)),
-          h('div', { style: { fontWeight: 600, fontSize: 13 } }, '控制中心'),
-          h('button', {
-            style: { ...baseBtn, marginLeft: 'auto' }, disabled: busy,
-            onClick: () => { setBusy(true); load().finally(() => setBusy(false)); },
-          }, busy ? '…' : '刷新')),
-        h('div', { style: { fontSize: 10, color: C.dim, marginTop: 2 } },
-          '更新于 ' + new Date(data.generatedAt).toLocaleTimeString() +
-          (data.sessionTotal ? '　·　' + data.sessionTotal.text : '')),
+      return h('div', { style: ROOT },
+        // ══════ 固定顶部：切分类 / 搜索（不随列表滚动）══════
+        h('div', { style: TOP },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            h('span', { style: { color: C.accent } }, h(Icon)),
+            h('div', { style: { fontWeight: 600, fontSize: 13 } }, '控制中心'),
+            h('button', {
+              style: { ...baseBtn, marginLeft: 'auto' }, disabled: busy,
+              onClick: () => { setBusy(true); load().finally(() => setBusy(false)); },
+            }, busy ? '…' : '刷新')),
+          h('div', { style: { fontSize: 10, color: C.dim, marginTop: 2 } },
+            '更新于 ' + new Date(data.generatedAt).toLocaleTimeString() +
+            (data.sessionTotal ? '　·　' + data.sessionTotal.text : '')),
 
-        // ── 提示条 ──
-        toast ? h('div', {
-          style: {
-            ...card, marginTop: 8, fontSize: 11,
-            borderColor: toast.ok ? C.good : C.bad,
-            color: toast.ok ? C.good : C.bad,
-          },
-        }, toast.text) : null,
-        data.errors && data.errors.length
-          ? h('div', { style: { ...card, marginTop: 8, fontSize: 11, borderColor: C.warn, color: C.warn } },
-              '有 ' + data.errors.length + ' 类信息没读到（不影响其他部分）：' +
-              data.errors.map((e) => e.group).join('、'))
-          : null,
+          toast ? h('div', {
+            style: {
+              marginTop: 8, fontSize: 11, borderRadius: 8, padding: '6px 9px',
+              border: '1px solid ' + (toast.ok ? C.good : C.bad),
+              color: toast.ok ? C.good : C.bad,
+            },
+          }, toast.text) : null,
 
-        // ── 分类 ──
-        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 } },
-          groups.map((g) => h('span', {
-            key: g.key, style: pill(group === g.key), onClick: () => setGroup(g.key),
-          }, `${g.zh} ${g.count}`)),
-          h('span', {
-            style: pill(group === 'trash'), onClick: () => setGroup('trash'),
-          }, `回收站 ${(data.trash || []).length}`)),
+          data.errors && data.errors.length
+            ? h('div', {
+                style: {
+                  marginTop: 8, fontSize: 11, borderRadius: 8, padding: '6px 9px',
+                  border: '1px solid ' + C.warn, color: C.warn,
+                },
+              }, '有 ' + data.errors.length + ' 类信息没读到（不影响其他部分）：' + data.errors.map((e) => e.group).join('、'))
+            : null,
 
-        // ── 搜索 ──
-        group !== 'trash' ? h('input', {
-          value: query, onChange: (e) => setQuery(e.target.value),
-          placeholder: '搜索名字或说明…',
-          style: {
-            width: '100%', boxSizing: 'border-box', marginTop: 8, marginBottom: 8,
-            padding: '5px 8px', fontSize: 11, borderRadius: 6,
-            border: '1px solid ' + C.line, background: 'transparent', color: C.fg,
-          },
-        }) : null,
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 } },
+            groups.map((g) => h('span', {
+              key: g.key, style: pill(group === g.key), onClick: () => setGroup(g.key),
+            }, `${g.zh} ${g.count}`)),
+            h('span', {
+              style: pill(group === 'trash'), onClick: () => setGroup('trash'),
+            }, `回收站 ${(data.trash || []).length}`)),
 
-        // ── 当前分类说明 ──
-        (() => {
-          const g = groups.find((x) => x.key === group);
-          return h('div', { style: { fontSize: 11, color: C.dim, marginBottom: 8 } },
+          group !== 'trash' ? h('input', {
+            value: query, onChange: (e) => setQuery(e.target.value),
+            placeholder: '搜索名字或说明…',
+            style: {
+              width: '100%', boxSizing: 'border-box', marginTop: 8,
+              padding: '5px 8px', fontSize: 11, borderRadius: 6,
+              border: '1px solid ' + C.line, background: 'transparent', color: C.fg,
+            },
+          }) : null,
+
+          h('div', { style: { fontSize: 11, color: C.dim, marginTop: 8 } },
             group === 'trash'
               ? '删掉的东西都在这儿，随时可以放回去。不会真的从磁盘上消失。'
-              : (g ? g.desc : ''));
-        })(),
+              : (curGroup ? curGroup.desc : '')),
 
-        // ── 插件分类的额外开关 ──
-        group === 'plugins' ? h('label', {
-          style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.dim, marginBottom: 8, cursor: 'pointer' },
-        },
-          h('input', { type: 'checkbox', checked: showTransitive, onChange: (e) => setShowTransitive(e.target.checked) }),
-          '也显示「依赖的依赖」（插件自动带进来的内部包，一般不用管）') : null,
+          group === 'plugins' ? h('label', {
+            style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.dim, marginTop: 6, cursor: 'pointer' },
+          },
+            h('input', { type: 'checkbox', checked: showTransitive, onChange: (e) => setShowTransitive(e.target.checked) }),
+            '也显示「依赖的依赖」（插件自动带进来的内部包，一般不用管）') : null),
 
-        // ── 列表 ──
-        group === 'trash'
-          ? ((data.trash || []).length === 0
-              ? h('div', { style: { ...card, color: C.dim, fontSize: 12 } }, '回收站是空的。')
-              : (data.trash || []).map((t, i) => h('div', { key: i, style: card },
-                  h('div', { style: { fontSize: 12, fontWeight: 600 } }, t.label || t.original),
-                  h('div', { style: { fontSize: 10, color: C.dim, marginTop: 2 } },
-                    '删于 ' + new Date(t.at).toLocaleString() + '　·　原位置：' + t.original),
-                  h('div', { style: { marginTop: 6 } },
-                    h('button', {
-                      style: btn(false, !t.exists || busy),
-                      disabled: !t.exists || busy,
-                      onClick: () => doAction({ group: 'trash', id: t.stored, title: t.label }, 'restore'),
-                    }, t.exists ? '还原' : '文件已不在')))))
-          : (filtered.length === 0
-              ? h('div', { style: { ...card, color: C.dim, fontSize: 12 } },
-                  items.length === 0 ? '这一类暂时没有内容。' : '没有匹配「' + query + '」的项。')
-              : filtered.map((it) => h('div', {
-                  key: it.id, style: { ...card, opacity: it.enabled ? 1 : 0.62 },
-                },
-                  // 标题行
-                  h('div', { style: { display: 'flex', alignItems: 'center', fontSize: 12 } },
-                    h(Dot, { on: it.enabled, protected: it.protected }),
-                    h('span', { style: { fontWeight: 600, wordBreak: 'break-all' } }, it.title),
-                    it.protected ? h('span', { style: { color: C.warn, marginLeft: 4, fontSize: 11 } }, '🔒') : null,
-                    h('span', { style: { marginLeft: 'auto', color: it.enabled ? C.good : C.dim, fontSize: 10, flex: '0 0 auto' } },
-                      it.enabled ? '启用中' : '已停用')),
-                  // 中文说明
-                  h('div', { style: { fontSize: 11, color: it.zh ? C.fg : C.warn, marginTop: 4, lineHeight: 1.5 } },
-                    it.zh || ('（还没有中文说明）' + (it.original ? ' 原文：' + String(it.original).slice(0, 160) : ''))),
-                  // 健康提示
-                  it.healthText ? h('div', { style: { fontSize: 10, color: C.warn, marginTop: 3 } }, '⚠ ' + it.healthText) : null,
-                  // 明细
-                  it.meta ? h('div', { style: { fontSize: 10, color: C.dim, marginTop: 5, lineHeight: 1.6 } },
-                    Object.entries(it.meta).map(([k, v]) => h('div', { key: k }, k + '：' + v))) : null,
-                  // 按钮
-                  h('div', { style: { display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' } },
-                    (it.actions || []).length === 0
-                      ? h('span', { style: { fontSize: 10, color: C.dim } }, '这一项没有可执行的操作')
-                      : (it.actions || []).map((a) => {
-                      const [verb] = a.split(':');
-                      const spec = ACTIONS[verb] || { zh: verb, danger: false, hint: '' };
-                      const disabled = busy || (it.protected && verb !== 'enable');
-                      return h('button', {
-                        key: a,
-                        style: btn(spec.danger, disabled),
-                        disabled,
-                        title: it.protected && verb !== 'enable' ? '这是必需组件，禁止操作（会把界面弄坏）' : spec.hint,
-                        onClick: () => click(it, a),
-                      }, spec.zh);
-                    }))))),
+        // ══════ 可滚动列表 ══════
+        h('div', { style: SCROLL },
+          group === 'trash'
+            ? ((data.trash || []).length === 0
+                ? h('div', { style: { ...card, color: C.dim, fontSize: 12 } }, '回收站是空的。')
+                : (data.trash || []).map((t, i) => h('div', { key: i, style: card },
+                    h('div', { style: { fontSize: 12, fontWeight: 600, wordBreak: 'break-all' } }, t.label || t.original),
+                    h('div', { style: { fontSize: 10, color: C.dim, marginTop: 2 } },
+                      '删于 ' + new Date(t.at).toLocaleString() + '　·　原位置：' + t.original),
+                    h('div', { style: { marginTop: 6 } },
+                      h('button', {
+                        style: btn(false, !t.exists || busy),
+                        disabled: !t.exists || busy,
+                        onClick: () => doAction({ group: 'trash', id: t.stored, title: t.label }, 'restore'),
+                      }, t.exists ? '还原' : '文件已不在')))))
+            : (filtered.length === 0
+                ? h('div', { style: { ...card, color: C.dim, fontSize: 12 } },
+                    items.length === 0 ? '这一类暂时没有内容。' : '没有匹配「' + query + '」的项。')
+                : filtered.map((it) => {
+                    const acts = it.actions || [];
+                    return h('div', { key: it.id, style: { ...card, opacity: it.enabled ? 1 : 0.62 } },
+                      h('div', { style: { display: 'flex', alignItems: 'center', fontSize: 12 } },
+                        h(Dot, { on: it.enabled, protected: it.protected }),
+                        h('span', { style: { fontWeight: 600, wordBreak: 'break-all' } }, it.title),
+                        it.protected ? h('span', { style: { color: C.warn, marginLeft: 4, fontSize: 11 } }, '🔒') : null,
+                        h('span', { style: { marginLeft: 'auto', color: it.enabled ? C.good : C.dim, fontSize: 10, flex: '0 0 auto' } },
+                          it.enabled ? '启用中' : '已停用')),
+                      h('div', { style: { fontSize: 11, color: it.zh ? C.fg : C.warn, marginTop: 4, lineHeight: 1.5 } },
+                        it.zh || ('（还没有中文说明）' + (it.original ? ' 原文：' + String(it.original).slice(0, 160) : ''))),
+                      it.healthText ? h('div', { style: { fontSize: 10, color: C.warn, marginTop: 3 } }, '⚠ ' + it.healthText) : null,
+                      it.meta ? h('div', { style: { fontSize: 10, color: C.dim, marginTop: 5, lineHeight: 1.6 } },
+                        Object.entries(it.meta).map(([k, v]) => h('div', { key: k, style: { wordBreak: 'break-all' } }, k + '：' + v))) : null,
+                      h('div', { style: { display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' } },
+                        acts.length === 0
+                          ? h('span', { style: { fontSize: 10, color: C.dim } }, '这一项没有可执行的操作')
+                          : acts.map((a) => {
+                              const [verb] = a.split(':');
+                              const spec = ACTIONS[verb] || { zh: verb, danger: false, hint: '' };
+                              const disabled = busy || (it.protected && verb !== 'enable');
+                              return h('button', {
+                                key: a, style: btn(spec.danger, disabled), disabled,
+                                title: it.protected && verb !== 'enable' ? '这是必需组件，禁止操作（会把界面弄坏）' : spec.hint,
+                                onClick: () => click(it, a),
+                              }, spec.zh);
+                            })));
+                  }))),
 
-        // ── 确认弹窗 ──
+        // ══════ 确认弹窗（fixed，不受滚动区影响）══════
         confirming ? h('div', {
           style: {
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
@@ -298,12 +311,9 @@ window.__ModuleLoader__.load({
             },
             onClick: (e) => e.stopPropagation(),
           },
-            h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 6 } },
-              '确定要' + confirming.spec.zh + '吗？'),
-            h('div', { style: { fontSize: 12, color: C.dim, marginBottom: 4, wordBreak: 'break-all' } },
-              confirming.item.title),
-            h('div', { style: { fontSize: 11, color: C.dim, marginBottom: 12 } },
-              confirming.spec.hint || ''),
+            h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 6 } }, '确定要' + confirming.spec.zh + '吗？'),
+            h('div', { style: { fontSize: 12, color: C.dim, marginBottom: 4, wordBreak: 'break-all' } }, confirming.item.title),
+            h('div', { style: { fontSize: 11, color: C.dim, marginBottom: 12 } }, confirming.spec.hint || ''),
             confirming.action === 'disable' && group === 'plugins'
               ? h('div', { style: { fontSize: 11, color: C.warn, marginBottom: 12 } }, '插件停用后需要重启应用才会真正生效。')
               : null,
