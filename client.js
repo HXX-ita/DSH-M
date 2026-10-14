@@ -60,9 +60,9 @@ window.__ModuleLoader__.load({
       restore: { zh: '还原', danger: false, hint: '放回原来的位置' },
       open: { zh: '打开文件夹', danger: false, hint: '在文件管理器里打开它的位置' },
       // QQ 机器人专用（实现见 lib/qqbot.mjs）
-      'qqbot-health': { zh: '体检', danger: false, hint: '看进程、父进程（孤儿检测）、网关连接和日志状态' },
+      'qqbot-health': { zh: '体检', danger: false, hint: '看进程在不在、网关通不通、日志有没有在动。（启动器的父进程退出是常态，不算故障）' },
       'qqbot-console': { zh: '改资料', danger: false, hint: '打开 QQ 开放平台的机器人资料页 —— 改昵称/头像必须在控制台做，腾讯没开放 API（每次改都要过审）' },
-      'qqbot-restart': { zh: '重启机器人', danger: true, hint: '杀掉旧进程并用计划任务重新拉起（旧进程可能变成收不到消息的孤儿）' },
+      'qqbot-restart': { zh: '重启机器人', danger: true, hint: '杀掉旧进程并用计划任务重新拉起（进程僵死、收不到消息时用）' },
     };
 
     const baseBtn = {

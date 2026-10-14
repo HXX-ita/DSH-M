@@ -42,10 +42,18 @@ check('说明了"要过审"', /过审/.test(r1.message || ''), r1.message);
 
 console.log('\n══ 4. 「体检」动作返回一句人话（客户端 toast 会显示它）══');
 const r2 = await performAction({ group: 'processes', action: 'qqbot-health', id: 'dsh-qqbot' });
-check('返回 ok', r2.ok === true);
+// 体检是**查询**不是修改 —— 查出问题也必须 ok:true，否则客户端会当成"操作失败"把结论盖掉
+check('体检是查询，永远返回 ok', r2.ok === true);
 check('有 message', typeof r2.message === 'string' && r2.message.length > 3, (r2.message || '').slice(0, 60));
-check('message 带结论图标', /✅|⚠️|🚨/.test(r2.message || ''));
+check('message 带结论图标', /✅|🚨/.test(r2.message || ''));
 check('带 detail（供排查）', !!r2.detail);
+
+// ★ 2026-10-15 更正：启动器拉起机器人后**必然退出**（计划任务返回码 0xC000013A），
+//   所以「父进程不在」是**常态**，绝不能当成故障。
+//   第一版把它当病因 → 健康的机器人被报成 bad。**这个测试就是抓到它的那条。**
+check('孤儿不等于故障（启动器退出是常态）',
+  !(h.orphan === true && h.verdict === 'bad'),
+  'orphan=' + h.orphan + ' verdict=' + h.verdict + ' 网关连接=' + h.gateway.count);
 
 console.log('\n══ 5. 重启动作的"只读部分"不会误伤 ══');
 // 不真跑 restartBot（会重启机器人）；只验证它在 PID 校验不过时会拒绝 —— 用一个不存在的 action 验证 throw 路径
