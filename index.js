@@ -100,6 +100,17 @@ export function apply(ctx, config = {}) {
       webServer.register({ kind: 'exact', path: ACTION_PATH, handler: actionHandler }),
     ];
     logger.info?.(`[dsh-m] 控制中心已就绪：${STATE_PATH} / ${ACTION_PATH}`);
+
+    // ★ 后台预热 QQ 机器人体检。
+    //   体检要跑一次 PowerShell（Get-CimInstance + Get-NetTCPConnection + Get-ScheduledTask，
+    //   实测冷启动约 4.4 秒），如果等界面第一次请求时才跑，那一次会卡很久。
+    //   这里在插件加载时就悄悄跑一遍，把结果放进 60 秒缓存 —— 用户打开面板时就是热的。
+    //   **不 await**：预热失败也绝不能影响插件激活。
+    import('./lib/qqbot.mjs')
+      .then((m) => m.botHealth({ fresh: true }))
+      .then((h) => logger.info?.(`[dsh-m] QQ 机器人体检预热完成：${h.verdict}`))
+      .catch(() => { /* 没装机器人、或 PowerShell 不可用都无所谓 */ });
+
     ctx.effect(() => () => { for (const d of disposers) { try { d && d(); } catch { /* ignore */ } } });
   });
 }

@@ -59,6 +59,10 @@ window.__ModuleLoader__.load({
       'task-disable': { zh: '停用任务', danger: true, hint: '到点也不会再自动运行' },
       restore: { zh: '还原', danger: false, hint: '放回原来的位置' },
       open: { zh: '打开文件夹', danger: false, hint: '在文件管理器里打开它的位置' },
+      // QQ 机器人专用（实现见 lib/qqbot.mjs）
+      'qqbot-health': { zh: '体检', danger: false, hint: '看进程、父进程（孤儿检测）、网关连接和日志状态' },
+      'qqbot-console': { zh: '改资料', danger: false, hint: '打开 QQ 开放平台的机器人资料页 —— 改昵称/头像必须在控制台做，腾讯没开放 API（每次改都要过审）' },
+      'qqbot-restart': { zh: '重启机器人', danger: true, hint: '杀掉旧进程并用计划任务重新拉起（旧进程可能变成收不到消息的孤儿）' },
     };
 
     const baseBtn = {
@@ -146,7 +150,9 @@ window.__ModuleLoader__.load({
           const j = await r.json();
           if (j.ok) {
             if (j.state) setData(j.state);
-            setToast({ ok: true, text: `已${ACTIONS[action] ? ACTIONS[action].zh : action}：${item.title}` });
+            // 有些动作会带回一句人话（例如 QQ 机器人「体检」的结论），优先显示它
+            const msg = j.result && j.result.message;
+            setToast({ ok: true, text: msg || `已${ACTIONS[action] ? ACTIONS[action].zh : action}：${item.title}` });
           } else {
             setToast({ ok: false, text: '没成功：' + (j.error || '未知原因') });
             await load();
