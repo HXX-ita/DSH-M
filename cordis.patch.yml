@@ -1,0 +1,8 @@
+# dsh-control-center 自带 patch
+#
+# 被 profile 通过 `- id: dsh-m / name: dsh-control-center` 引用，
+# 或经插件管理器安装时自动叠加。
+- insert:
+    - id: dsh-m
+      name: 'dsh-control-center'
+      config: {}

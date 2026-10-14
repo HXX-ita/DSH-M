@@ -1,0 +1,25 @@
+{
+  "name": "dsh-control-center",
+  "version": "0.1.0",
+  "description": "DSH-M 控制中心：在 DeepSeek Harness 界面里统一查看与开关技能、插件、模型厂商、定时任务、常驻进程和会话记录。每项都带中文说明，所有删除走回收站可还原。 · A control center plugin for DeepSeek Harness: see and toggle skills, plugins, model providers, scheduled tasks, resident processes and sessions in one place, with Chinese annotations and a recoverable trash.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": { "default": "./index.js" },
+    "./client": { "default": "./client.js" },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web" }
+  },
+  "files": ["index.js", "client.js", "lib", "bin", "cordis.patch.yml", "README.md", "LICENSE"],
+  "keywords": ["deepseek-harness", "dsh", "dsh-plugin", "control-center", "manager", "skills", "plugins"],
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "collect": "node bin/dsh-m.mjs collect",
+    "collect:full": "node bin/dsh-m.mjs collect --full",
+    "test": "node test/yaml.test.mjs && node test/actions.test.mjs"
+  }
+}
