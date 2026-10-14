@@ -73,6 +73,7 @@ check('带回收站列表', Array.isArray(r1.body.trash));
 check('带家目录路径', typeof r1.body.home === 'string', r1.body.home);
 
 // ── 非本机访问必须拒绝 ──
+// 用 192.0.2.x：这是 RFC 5737 专门保留给文档举例的网段，永远不会是真实主机
 const r2 = fakeRes();
 await handlers['/dsh-m/state'](fakeReq({ remote: '192.0.2.50' }), r2);
 check('外部 IP 访问被拒绝（403）', r2.code === 403, 'code=' + r2.code);
